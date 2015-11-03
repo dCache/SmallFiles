@@ -210,7 +210,11 @@ if [ $command = "get" ] ; then
    #
    # handle 0-byte files
    #
-   if [ ${originalId} = "*" ] ; then 
+   if [ "${archiveId}" = "*" ] ; then
+     report "Restoring 0-byte file: ${originalId}."
+     exit 0
+   elif [ "${originalId}" = "*" ] ; then
+     report "Restoring old faulty entry for 0-byte file. To fix set bfid to ${originalId}:${archiveId}"
      exit 0
    fi
    #
@@ -243,7 +247,7 @@ elif [ $command = "put" ] ; then
    [ -z "${filesize}" ] && problem 31 "File not found : ${filename}"
    if [ "${filesize}" = "0" ];
    then 
-     result="dcache://dcache/store=${store}&group=${group}&bfid=*:${pnfsid}" 
+     result="dcache://dcache/store=${store}&group=${group}&bfid=${pnfsid}:*"
    else
      #
      #  now, finally copy the file to the HSM
