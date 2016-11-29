@@ -2,8 +2,8 @@
 # Specfile for the dCache SmallFiles service
 #
 Summary: Scripts that allow handling of small files with dCache
-Name: dcache-smallfiles
-Version: 1.0
+Name: dcache-smallfiles-pool
+Version: 1.1
 Release: 1
 License: GPL
 Group: Applications/Services
