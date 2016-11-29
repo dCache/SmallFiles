@@ -78,7 +78,7 @@ datasetPut() {
 
    [ ${result} -ne 0 ] && problem 102 "Error running mongo script"
 
-   [ -z "${reply}" ] && problem 2 "Not yet ready"
+   [ -z "${reply}" ] && problem 72 "Not yet ready"
 
    iserror=$(expr "${reply}" : "ERROR \([0-9]*\).*")
 
@@ -89,7 +89,7 @@ datasetPut() {
       reply=`echo "${reply}" | grep dcache:`
 
       # no results after filtering
-      [ -z "${reply}" ] && problem 2 "Not yet ready (empty)"
+      [ -z "${reply}" ] && problem 72 "Not yet ready (empty)"
 
       echo "${reply}"
       return 0
