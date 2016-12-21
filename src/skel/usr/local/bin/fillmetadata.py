@@ -8,6 +8,7 @@ import signal
 import ConfigParser as parser
 from pymongo import MongoClient, Connection, errors
 import logging
+import logging.handlers
 
 running = True
 
@@ -30,6 +31,10 @@ def dotfile(filepath, tag):
 def main(configfile = '/etc/dcache/container.conf'):
     global running
 
+    #initialize logging
+    logger = logging.getLogger()
+    log_handler = None
+
     try:
         while running:
             configuration = parser.RawConfigParser(defaults = { 'scriptId': 'pack', 'mongoUri': 'mongodb://localhost/', 'mongoDb': 'smallfiles', 'loopDelay': 5, 'logLevel': 'ERROR' })
@@ -41,18 +46,26 @@ def main(configfile = '/etc/dcache/container.conf'):
             global mongoDb
 
             scriptId = configuration.get('DEFAULT', 'scriptId')
-            logging.basicConfig(filename='/var/log/dcache/fillmetadata-%s.log' % scriptId,
-                        format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s')
+            
+            logLevelStr = configuration.get('DEFAULT', 'logLevel')
+            logLevel = getattr(logging, logLevelStr.upper(), None)
+            logger.setLevel(logLevel)
+
+            if log_handler is not None:
+                log_handler.close()
+                logger.removeHandler(log_handler)
+
+            log_handler = logging.handlers.WatchedFileHandler('/var/log/dcache/fillmetadata-%s.log' % scriptId)
+            formatter = logging.Formatter('%(asctime)s %(name)-80s %(levelname)-8s %(message)s')
+            log_handler.setFormatter(formatter)
+            logger.addHandler(log_handler)
+
             mountPoint = configuration.get('DEFAULT', 'mountPoint')
             dataRoot = configuration.get('DEFAULT', 'dataRoot')
             mongoUri = configuration.get('DEFAULT', 'mongoUri')
             mongoDb  = configuration.get('DEFAULT', 'mongodb')
             loopDelay = configuration.getint('DEFAULT', 'loopDelay')
-            logLevelStr = configuration.get('DEFAULT', 'logLevel')
-            logLevel = getattr(logging, logLevelStr.upper(), None)
-
-            logging.getLogger().setLevel(logLevel)
-
+            
             logging.info('Successfully read configuration from file %s.' % configfile)
 
             try:
