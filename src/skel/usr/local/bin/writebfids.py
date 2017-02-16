@@ -40,7 +40,7 @@ def main(configfile = '/etc/dcache/container.conf'):
 
             scriptId = configuration.get('DEFAULT', 'scriptId')
 
-            logLevelStr = configuration.get('DEFAULT', 'scriptId')
+            logLevelStr = configuration.get('DEFAULT', 'logLevel')
             logLevel = getattr(logging, logLevelStr.upper(), None)
             logger.setLevel(logLevel)
 
