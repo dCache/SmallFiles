@@ -1,6 +1,6 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
-from urlparse import urlparse
+from urllib.parse import urlparse
 import socket
 import struct
 import os
@@ -56,7 +56,7 @@ class Dcap:
 	def _rcv_control_msg(self):
 		msg = ''
 		while True:
-			chunk = self.socket.recv(1)
+			chunk = self.socket.recv(1).decode('utf-8')
 			if chunk == '':
 				raise RuntimeError("socket connection broken")
 			if chunk == '\n':
@@ -65,7 +65,9 @@ class Dcap:
 		return msg
 
 	def _send_control_msg(self, msg):
-		sent = self.socket.sendall(msg + '\n')
+		cmsg = msg + '\n'
+		sent = self.socket.sendall(cmsg.encode('utf-8'))
+
 		if sent == 0:
 			raise RuntimeError("socket connection broken")
 		self.seq += 1
@@ -82,8 +84,9 @@ class Dcap:
 
 	def open_file(self, path, mode='r'):
 		session = self.seq
-		open_opemmand = "%d 0 client open dcap://%s:%d/%s/%s %s localhost 1111 -passive -uid=%d -gid=%d" % \
+		open_opemmand = "%d 0 client open \"dcap://%s:%d/%s/%s\" %s localhost 1111 -passive -uid=%d -gid=%d" % \
 			(self.seq, self.host, self.port, self.root, path, mode, os.getuid(), os.getgid())
+		print(open_opemmand)
 		self._send_control_msg(open_opemmand)
 		reply = self._rcv_control_msg()
 		host, port, chalange = self.parse_reply(reply, path)
@@ -104,7 +107,7 @@ class Dcap:
 		packer = struct.Struct('>II')
 
 		s.send(packer.pack(session, len(chalange)))
-		s.send(chalange)
+		s.send(chalange.encode('utf-8'))
 		return s
 
 	def rename(self, src, dest):
@@ -119,12 +122,11 @@ class Dcap:
 
 def readFully(s, count):
 	n = count
-	data = ''
+	data = bytearray()
 	while n > 0:
 		d = s.recv(n)
 		n = n - len(d)
-		data = data + d
-	print data
+		data.extend(d)
 	return data
 
 class DcapStream:
@@ -151,7 +153,7 @@ class DcapStream:
 		msg = self.socket.recv(unpacker.size)
 
 		data_unpacker = struct.Struct('>I')
-		data = ''
+		data = bytearray()
 		while True:
 			data_header = self.socket.recv(data_unpacker.size)
 			count = data_unpacker.unpack(data_header)[0]
@@ -159,7 +161,7 @@ class DcapStream:
 			if count == END_OF_DATA:
 				self._get_ack()
 				break
-			data = data + readFully(self.socket, count)
+			data.extend(readFully(self.socket, count))
 		return data
 
 	def read(self, count):
@@ -211,7 +213,7 @@ class DcapStream:
 		data_header = data_packer.pack(4, DATA, statinfo.st_size)
 		self.socket.sendall(data_header)
 
-		with open(src,'r') as f:
+		with open(src,'rb') as f:
 			while True:
 				data = f.read(256 * 1024)
 				if len(data) == 0:
@@ -225,7 +227,7 @@ class DcapStream:
 
 	def recv_file(self, dst):
 
-		with open(dst,'w') as f:
+		with open(dst,'wb') as f:
 			while True:
 				data = self.read(1024 * 1024)
 				if len(data) == 0:
@@ -266,7 +268,7 @@ class DcapStream:
 		while totalToRead > 0:
 			data_header = self.socket.recv(data_unpacker.size)
 			count = data_unpacker.unpack(data_header)[0]
-			print "reading %d bytes" % count
+			print("reading %d bytes" % count)
 			data = data + readFully(self.socket, count)
 			totalToRead = totalToRead - count
 		self._get_ack()
