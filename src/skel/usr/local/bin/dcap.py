@@ -84,9 +84,8 @@ class Dcap:
 
 	def open_file(self, path, mode='r'):
 		session = self.seq
-		open_opemmand = "%d 0 client open \"dcap://%s:%d/%s/%s\" %s localhost 1111 -passive -uid=%d -gid=%d" % \
+		open_opemmand = "%d 0 client open \"dcap://%s:%d/%s/%s\" %s localhost 1111 -passive -uid=%d -gid=%d -mode=0644" % \
 			(self.seq, self.host, self.port, self.root, path, mode, os.getuid(), os.getgid())
-		print(open_opemmand)
 		self._send_control_msg(open_opemmand)
 		reply = self._rcv_control_msg()
 		host, port, chalange = self.parse_reply(reply, path)
