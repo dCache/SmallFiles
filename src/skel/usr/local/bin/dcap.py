@@ -170,7 +170,7 @@ class DcapStream:
 		self._get_ack()
 		return self._get_data()
 
-	def seek(self, offset,  from_what ):
+	def seek(self, offset,  from_what = 0 ):
 		packer = struct.Struct('>IIqI')
 		msg = packer.pack( 16, DCAP_SEEK, offset,  from_what );
 		self.socket.sendall(msg)
