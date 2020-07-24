@@ -163,7 +163,18 @@ class DcapStream:
 			data.extend(readFully(self.socket, count))
 		return data
 
+
 	def read(self, count = -1):
+
+		if count == -1:
+			data = bytearray()
+			while True:
+				d = self.read(1024*1024)
+				if len(d) == 0:
+					break;
+				data.extend(d)
+			return data
+
 		packer = struct.Struct('>IIq')
 		msg = packer.pack( 12, DCAP_READ, count)
 		self.socket.sendall(msg)
