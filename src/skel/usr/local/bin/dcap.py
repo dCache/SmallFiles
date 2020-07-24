@@ -163,7 +163,7 @@ class DcapStream:
 			data.extend(readFully(self.socket, count))
 		return data
 
-	def read(self, count):
+	def read(self, count = -1):
 		packer = struct.Struct('>IIq')
 		msg = packer.pack( 12, DCAP_READ, count)
 		self.socket.sendall(msg)
