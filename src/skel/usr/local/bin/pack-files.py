@@ -29,10 +29,10 @@ def sigint_handler(signum, frame):
 scriptId = 'pack'
 archiveUser = 'root'
 archiveMode = '0644'
-mongoUri = "mongodb://localhost/"
-mongoDb  = "smallfiles"
-mountPoint = ""
-dataRoot = ""
+mongo_uri = "mongodb://localhost/"
+mongo_db  = "smallfiles"
+mount_point = ""
+data_root = ""
 dcapUrl = ""
 
 class StoreZipFile(ZipFile):
@@ -135,7 +135,7 @@ class Container:
     def __init__(self, localtargetdir, dcap):
         self.filename = str(uuid.uuid1())
         self.localfilepath = os.path.join(localtargetdir, self.filename)
-        pnfstargetdir = localtargetdir.replace(mountPoint, dataRoot, 1)
+        pnfstargetdir = localtargetdir.replace(mount_point, data_root, 1)
         self.pnfsfilepath = os.path.join(pnfstargetdir, self.filename)
 
         self.logger = logging.getLogger(name="Container[%s]" % self.pnfsfilepath)
@@ -187,7 +187,7 @@ class GroupPackager:
         self.pathPattern = re.compile(os.path.join(path, filePattern))
         self.sGroup = re.compile(sGroup)
         self.storeName = re.compile(storeName)
-        self.archivePath = os.path.join(mountPoint, archivePath)
+        self.archivePath = os.path.join(mount_point, archivePath)
         if not os.path.exists(self.archivePath):
             os.makedirs(self.archivePath, mode=0777)
             os.chmod(self.archivePath, 0777)
@@ -195,8 +195,8 @@ class GroupPackager:
         self.minAge = int(minAge)
         self.maxAge = int(maxAge)
         self.verify = verify
-        self.client = MongoClient(mongoUri)
-        self.db = self.client[mongoDb]
+        self.client = MongoClient(mongo_uri)
+        self.db = self.client[mongo_db]
         self.logger = logging.getLogger(name="GroupPackager[%s]" % self.pathPattern.pattern)
 
     def __del__(self):
@@ -303,7 +303,7 @@ class GroupPackager:
                             self.writeStatus(container.pnfsfilepath, self.archiveSize-container.size, "%s [%s]" % ( f['path'], f['pnfsid'] ))
 
                         try:
-                            localfile = f['path'].replace(dataRoot, mountPoint, 1)
+                            localfile = f['path'].replace(data_root, mount_point, 1)
                             self.logger.debug("before container.add(%s[%s], %s)" % (f['path'], f['pnfsid'], f['size']))
                             container.add(f['pnfsid'], f['path'], localfile, f['size'])
                             self.logger.debug("before collection.save")
@@ -405,10 +405,10 @@ def main(configfile = '/etc/dcache/container.conf'):
             global scriptId
             global archiveUser
             global archiveMode
-            global mountPoint
-            global dataRoot
-            global mongoUri
-            global mongoDb
+            global mount_point
+            global data_root
+            global mongo_uri
+            global mongo_db
             global dcapUrl
             scriptId = configuration.get('DEFAULT', 'scriptId')
             

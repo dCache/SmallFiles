@@ -1,84 +1,89 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # coding=utf-8
 
 import os
 import sys
 import time
 import signal
-import ConfigParser as parser
-from pymongo import MongoClient, Connection, errors
+import configparser as parser
+from pymongo import MongoClient, errors
 import logging
 import logging.handlers
 
 running = True
 
-def sigint_handler(signum, frame):
-    global running
-    logging.info("Caught signal %d." % signum)
-    print("Caught signal %d.'" % signum)
-    running = False
-
-mongoUri = "mongodb://localhost/"
-mongoDb  = "smallfiles"
+mongoUri = ""
+mongoDb = ""
 mountPoint = ""
 dataRoot = ""
 
-def dotfile(filepath, tag):
-    with open(os.path.join(os.path.dirname(filepath), ".(%s)(%s)" % (tag, os.path.basename(filepath))), mode='r') as dotfile:
-       result = dotfile.readline().strip()
+
+def sigint_handler(signum, frame):
+    global running
+    logging.info(f"Caught signal {signum}.")
+    print(f"Caught signal {signum}.")
+    running = False
+
+
+def get_dotfile(filepath, tag):
+    with open(os.path.join(os.path.dirname(filepath), f".({tag})({os.path.basename(filepath)})"),
+              mode='r') as dotfile:
+        result = dotfile.readline().strip()
     return result
 
-def main(configfile = '/etc/dcache/container.conf'):
-    global running
 
-    #initialize logging
+def main(configfile='/etc/dcache/container.conf'):
+    global running
+    global mountPoint
+    global dataRoot
+    global mongoUri
+    global mongoDb
+
+    # initialize logging
     logger = logging.getLogger()
     log_handler = None
 
     try:
         while running:
-            configuration = parser.RawConfigParser(defaults = { 'scriptId': 'pack', 'mongoUri': 'mongodb://localhost/', 'mongoDb': 'smallfiles', 'loopDelay': 5, 'logLevel': 'ERROR' })
+            configuration = parser.RawConfigParser(
+                defaults={'scriptId': 'pack', 'mongoUri': 'mongodb://localhost/', 'mongoDb': 'smallfiles',
+                          'loopDelay': 5, 'logLevel': 'ERROR'})
             configuration.read(configfile)
 
-            global mountPoint
-            global dataRoot
-            global mongoUri
-            global mongoDb
+            script_id = configuration.get('DEFAULT', 'scriptId')
 
-            scriptId = configuration.get('DEFAULT', 'scriptId')
-            
-            logLevelStr = configuration.get('DEFAULT', 'logLevel')
-            logLevel = getattr(logging, logLevelStr.upper(), None)
-            logger.setLevel(logLevel)
+            log_level_str = configuration.get('DEFAULT', 'logLevel')
+            log_level = getattr(logging, log_level_str.upper(), None)
+            logger.setLevel(log_level)
 
             if log_handler is not None:
                 log_handler.close()
                 logger.removeHandler(log_handler)
 
-            log_handler = logging.handlers.WatchedFileHandler('/var/log/dcache/fillmetadata-%s.log' % scriptId)
-            formatter = logging.Formatter('%(asctime)s %(name)-80s %(levelname)-8s %(message)s')
+            log_handler = logging.handlers.WatchedFileHandler(f'/var/log/dcache/fillmetadata-{script_id}.log')
+            formatter = logging.Formatter('%(asctime)s %(name)-10s %(levelname)-8s %(message)s')
             log_handler.setFormatter(formatter)
             logger.addHandler(log_handler)
 
             mountPoint = configuration.get('DEFAULT', 'mountPoint')
             dataRoot = configuration.get('DEFAULT', 'dataRoot')
             mongoUri = configuration.get('DEFAULT', 'mongoUri')
-            mongoDb  = configuration.get('DEFAULT', 'mongodb')
-            loopDelay = configuration.getint('DEFAULT', 'loopDelay')
-            
-            logging.info('Successfully read configuration from file %s.' % configfile)
+            mongoDb = configuration.get('DEFAULT', 'mongodb')
+            loop_delay = configuration.getint('DEFAULT', 'loopDelay')
+
+            logger.info(f'Successfully read configuration from file {configfile}.')
 
             try:
                 client = MongoClient(mongoUri)
                 db = client[mongoDb]
 
-                with db.files.find( { 'state': { '$exists': False } }, snaphot=True ) as newFilesCursor:
-                    logging.info("found %d new files" % (newFilesCursor.count()))
-                    for record in newFilesCursor:
+                with db.files.find({'state': {'$exists': False}}, snapshot=True) as new_files_cursor:
+                    logger.info(f"found {new_files_cursor.count()} new files")
+                    for record in new_files_cursor:
                         if not running:
                             sys.exit(1)
                         try:
-                            pathof = dotfile(os.path.join(mountPoint, record['pnfsid']), 'pathof')
+                            pathof = get_dotfile(os.path.join(mountPoint, record['pnfsid']), 'pathof')
                             localpath = pathof.replace(dataRoot, mountPoint, 1)
                             stats = os.stat(localpath)
 
@@ -88,37 +93,36 @@ def main(configfile = '/etc/dcache/container.conf'):
                             record['ctime'] = stats.st_ctime
                             record['state'] = 'new'
 
-                            newFilesCursor.collection.save(record)
-                            logging.debug("Updated record: %s" % str(record))
+                            new_files_cursor.collection.save(record)
+                            logger.debug(f"Updated record: {str(record)}")
                         except KeyError as e:
-                            logging.warn("KeyError: %s: %s" % (str(record), e.message))
-                        except IOError as e:
-                            logging.warn("IOError: %s: %s" % (str(record), e.message))
-                            logging.info("Removing entry for file %s" % record['pnfsid'])
-                            db.files.remove( { 'pnfsid': record['pnfsid'] } )
-                        except OSError as e:
-                            logging.warn("OSError: %s: %s" % (str(record), e.message))
-                            logging.exception(e)
-                            logging.info("Removing entry for file %s" % record['pnfsid'])
-                            db.files.remove( { 'pnfsid': record['pnfsid'] } )
+                            logger.warning(f"KeyError: {str(record)}: {e}")
+                        except (IOError, OSError) as e:
+                            if type(e) == type(IOError):
+                                logger.warning(f"IOError: {str(record)}: {e}")
+                            else:
+                                logger.warning(f"OSError: {str(record)}: {e}")
+                            logger.exception(e)
+                            logger.info(f"Removing entry for file {record['pnfsid']}")
+                            db.files.remove({'pnfsid': record['pnfsid']})
 
                 client.close()
 
             except errors.ConnectionFailure as e:
-                logging.warn("Connection failure: %s" % e.message)
+                logger.warning(f"Connection failure: {e}")
             except errors.OperationFailure as e:
-                logging.warn("Could not create cursor: %s" % e.message)
+                logger.warning(f"Could not create cursor: {e}")
 
-            logging.info("Sleeping for 60 seconds")
+            logger.info("Sleeping for 60 seconds")
             time.sleep(60)
 
     except parser.NoOptionError as e:
-        print("Missing option: %s" % e.message)
-        logging.ERROR("Missing option: %s" % e.message)
+        print(f"Missing option: {e}")
+        logger.error(f"Missing option: {e}")
         sys.exit(2)
     except parser.Error as e:
-        print("Error reading configfile %s: %s" % (configfile, e.message))
-        logging.ERROR("Error reading configfile %s" % (configfile, e.message))
+        print(f"Error reading configfile {configfile}: {e}")
+        logger.error(f"Error reading configfile {configfile}: {e}")
         sys.exit(2)
 
 
@@ -135,4 +139,3 @@ if __name__ == '__main__':
     else:
         print("Usage: fillmetadata.py <configfile>")
         sys.exit(1)
-
