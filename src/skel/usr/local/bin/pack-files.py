@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # coding=utf-8
 
 import os
@@ -10,7 +10,7 @@ import logging
 import logging.handlers
 from datetime import datetime
 import re
-import ConfigParser as Parser
+import configparser as Parser
 import uuid
 import zlib
 from zipfile import ZipFile, ZipInfo, ZIP64_LIMIT, ZIP_DEFLATED
@@ -20,114 +20,21 @@ from dcap import Dcap
 
 running = True
 
-def sigint_handler(signum, frame):
-    global running
-    logging.info("Caught signal %d." % signum)
-    print("Caught signal %d." % signum)
-    running = False
-
 scriptId = 'pack'
 archiveUser = 'root'
 archiveMode = '0644'
-mongo_uri = "mongodb://localhost/"
-mongo_db  = "smallfiles"
-mount_point = ""
-data_root = ""
+mongoUri = "mongodb://localhost/"
+mongoDb = "smallfiles"
+mountPoint = ""
+dataRoot = ""
 dcapUrl = ""
 
-class StoreZipFile(ZipFile):
 
-    def __init__(self, file):
-        ZipFile.__init__(self, file, mode='w', allowZip64=True)
-
-    def write(self, filename, arcname=None, compress_type=None):
-        """Put the bytes from filename into the archive under the name
-        arcname."""
-        if not self.fp:
-            raise RuntimeError(
-                "Attempt to write to ZIP archive that was already closed")
-
-        st = os.stat(filename)
-        isdir = stat.S_ISDIR(st.st_mode)
-        mtime = time.localtime(st.st_mtime)
-        date_time = mtime[0:6]
-        # Create ZipInfo instance to store file information
-        if arcname is None:
-            arcname = filename
-        arcname = os.path.normpath(os.path.splitdrive(arcname)[1])
-        while arcname[0] in (os.sep, os.altsep):
-            arcname = arcname[1:]
-        if isdir:
-            arcname += '/'
-        zinfo = ZipInfo(arcname, date_time)
-        zinfo.external_attr = (st[0] & 0xFFFF) << 16L      # Unix attributes
-        if compress_type is None:
-            zinfo.compress_type = self.compression
-        else:
-            zinfo.compress_type = compress_type
-
-        zinfo.file_size = st.st_size
-        zinfo.flag_bits = 0x00
-        zinfo.header_offset = self.fp.tell()    # Start of header bytes
-
-        self._writecheck(zinfo)
-        self._didModify = True
-
-        if isdir:
-            zinfo.file_size = 0
-            zinfo.compress_size = 0
-            zinfo.CRC = 0
-            self.filelist.append(zinfo)
-            self.NameToInfo[zinfo.filename] = zinfo
-            self.fp.write(zinfo.FileHeader(False))
-            return
-
-        with open(filename, "rb") as fp:
-            # Must overwrite CRC and sizes with correct data later
-            zinfo.CRC = CRC = 0
-            zinfo.compress_size = compress_size = 0
-            # Compressed size can be larger than uncompressed size
-            zip64 = self._allowZip64 and \
-                    zinfo.file_size * 1.05 > ZIP64_LIMIT
-            self.fp.write(zinfo.FileHeader(zip64))
-            if zinfo.compress_type == ZIP_DEFLATED:
-                cmpr = zlib.compressobj(zlib.Z_DEFAULT_COMPRESSION,
-                                        zlib.DEFLATED, -15)
-            else:
-                cmpr = None
-            file_size = 0
-            while 1:
-                buf = fp.read(1024 * 1024)
-                if not buf:
-                    break
-                file_size = file_size + len(buf)
-                CRC = zlib.crc32(buf, CRC) & 0xffffffff
-                if cmpr:
-                    buf = cmpr.compress(buf)
-                    compress_size = compress_size + len(buf)
-                self.fp.write(buf)
-        if cmpr:
-            buf = cmpr.flush()
-            compress_size = compress_size + len(buf)
-            self.fp.write(buf)
-            zinfo.compress_size = compress_size
-        else:
-            zinfo.compress_size = file_size
-        zinfo.CRC = CRC
-        zinfo.file_size = file_size
-        if not zip64 and self._allowZip64:
-            if file_size > ZIP64_LIMIT:
-                raise RuntimeError('File size has increased during compressing')
-            if compress_size > ZIP64_LIMIT:
-                raise RuntimeError('Compressed size larger than uncompressed size')
-        # Seek backwards and write file header (which will now include
-        # correct CRC and file sizes)
-        position = self.fp.tell()       # Preserve current position in file
-        self.fp.seek(zinfo.header_offset, 0)
-        self.fp.write(zinfo.FileHeader(zip64))
-        self.fp.seek(position, 0)
-        self.filelist.append(zinfo)
-        self.NameToInfo[zinfo.filename] = zinfo
+def sigint_handler(signum, frame):
+    global running
+    logging.info(f"Caught signal {signum}.")
+    print(f"Caught signal {signum}.")
+    running = False
 
 
 class Container:
@@ -135,14 +42,14 @@ class Container:
     def __init__(self, localtargetdir, dcap):
         self.filename = str(uuid.uuid1())
         self.localfilepath = os.path.join(localtargetdir, self.filename)
-        pnfstargetdir = localtargetdir.replace(mount_point, data_root, 1)
+        pnfstargetdir = localtargetdir.replace(mountPoint, dataRoot, 1)
         self.pnfsfilepath = os.path.join(pnfstargetdir, self.filename)
 
-        self.logger = logging.getLogger(name="Container[%s]" % self.pnfsfilepath)
+        self.logger = logging.getLogger(name=f"Container[{self.pnfsfilepath}]")
         self.logger.debug("Initializing")
 
         self.dcaparc = dcap.open_file(self.pnfsfilepath, 'w')
-        self.arcfile = StoreZipFile(self.dcaparc)
+        self.arcfile = ZipFile(self.dcaparc)
         global archiveUser
         global archiveMode
         self.archiveUid = getpwnam(archiveUser).pw_uid
@@ -161,17 +68,18 @@ class Container:
         self.arcfile.write(localpath, arcname=pnfsid)
         self.size += size
         self.filecount += 1
-        self.logger.debug("Added file %s with pnfsid %s" % (filepath, pnfsid))
+        self.logger.debug(f"Added file {filepath} with pnfsid {pnfsid}")
 
-    def getFilelist(self):
+    def get_filelist(self):
         return self.arcfile.filelist
 
-    def verifyFilelist(self):
+    def verify_filelist(self):
         return len(self.arcfile.filelist) == self.filecount
 
-    def verifyChecksum(self, chksum):
-        self.logger.warn("Checksum verification not implemented, yet")
+    def verify_checksum(self, chksum):
+        self.logger.warning("Checksum verification not implemented, yet")
         return True
+
 
 class UserInterruptException(Exception):
     def __init__(self, arcfile):
@@ -180,58 +88,60 @@ class UserInterruptException(Exception):
     def __str__(self):
         return repr(self.arcfile)
 
+
 class GroupPackager:
 
-    def __init__(self, path, filePattern, sGroup, storeName, archivePath, archiveSize, minAge, maxAge, verify):
+    def __init__(self, path, file_pattern, s_group, store_name, archive_path, archive_size, min_age, max_age, verify):
         self.path = path
-        self.pathPattern = re.compile(os.path.join(path, filePattern))
-        self.sGroup = re.compile(sGroup)
-        self.storeName = re.compile(storeName)
-        self.archivePath = os.path.join(mount_point, archivePath)
+        self.pathPattern = re.compile(os.path.join(path, file_pattern))
+        self.sGroup = re.compile(s_group)
+        self.storeName = re.compile(store_name)
+        self.archivePath = os.path.join(mountPoint, archive_path)
         if not os.path.exists(self.archivePath):
-            os.makedirs(self.archivePath, mode=0777)
-            os.chmod(self.archivePath, 0777)
-        self.archiveSize = int(archiveSize.replace('G', '000000000').replace('M', '000000').replace('K', '000'))
-        self.minAge = int(minAge)
-        self.maxAge = int(maxAge)
+            os.makedirs(self.archivePath, mode=0o777)
+            os.chmod(self.archivePath, 0o777)
+        self.archiveSize = int(archive_size.replace('G', '000000000').replace('M', '000000').replace('K', '000'))
+        self.minAge = int(min_age)
+        self.maxAge = int(max_age)
         self.verify = verify
-        self.client = MongoClient(mongo_uri)
-        self.db = self.client[mongo_db]
-        self.logger = logging.getLogger(name="GroupPackager[%s]" % self.pathPattern.pattern)
+        self.client = MongoClient(mongoUri)
+        self.db = self.client[mongoDb]
+        self.logger = logging.getLogger(name=f"GroupPackager[{self.pathPattern.pattern}]")
 
     def __del__(self):
         pass
 
-    def verifyContainer(self, container):
-        verified = False
+    def verify_container(self, container):
         if self.verify == 'filelist':
-            verified = container.verifyFilelist()
+            verified = container.verify_filelist()
         elif self.verify == 'chksum':
-            verified = container.verifyChecksum(0)
+            verified = container.verify_checksum(0)
         elif self.verify == 'off':
             verified = True
         else:
-            self.logger.warn("Unknown verification method %s. Assuming failure!" % self.verify)
+            self.logger.warning(f"Unknown verification method {self.verify}. Assuming failure!")
             verified = False
 
         return verified
 
-    def createArchiveEntry(self, container):
+    def create_archive_entry(self, container):
+        container_local_path = container.localfilepath
+        container_chimera_path = container.pnfsfilepath
         try:
-            containerLocalPath = container.localfilepath
-            containerChimeraPath = container.pnfsfilepath
-            containerPnfsid = dotfile(containerLocalPath, 'id')
+            container_pnfsid = read_dotfile(container_local_path, 'id')
 
-            self.db.archives.insert( { 'pnfsid': containerPnfsid, 'path': containerChimeraPath } )
-        except IOError as e:
-            self.logger.critical("Could not find archive file %s, referred to by file entries in database! This needs immediate attention or you will lose data!" % containerChimeraPath)
+            self.db.archives.insert({'pnfsid': container_pnfsid, 'path': container_chimera_path})
+        except IOError:
+            self.logger.critical(
+                f"Could not find archive file {container_chimera_path}, referred to by file entries in database! "
+                f"This needs immediate attention or you will lose data!")
 
-    def writeStatus(self, arcfile, currentSize, nextFile):
+    def write_status(self, arcfile, current_size, next_file):
         global scriptId
-        with open("/var/log/dcache/pack-files-%s.status" % scriptId, 'w') as statusFile:
-            statusFile.write("Container: %s\n" % arcfile)
-            statusFile.write("Size: %d/%d\n" % ( currentSize, self.archiveSize ))
-            statusFile.write("Next: %s\n" % nextFile.encode('ascii', 'ignore'))
+        with open(f"/var/log/dcache/pack-files-{scriptId}.status", 'w') as statusFile:
+            statusFile.write(f"Container: {arcfile}\n")
+            statusFile.write(f"Size: {current_size}/{self.archiveSize}\n")
+            statusFile.write(f"Next: {next_file.encode('ascii', 'ignore')}\n")
 
     def run(self):
         global scriptId
@@ -240,13 +150,19 @@ class GroupPackager:
         dcap = Dcap(dcapUrl)
         try:
             now = int(datetime.now().strftime("%s"))
-            ctime_threshold = (now - self.minAge*60)
-            self.logger.debug("Looking for files matching { path: %s, group: %s, store: %s, ctime: { $lt: %d } }" % (self.pathPattern.pattern, self.sGroup.pattern, self.storeName.pattern, ctime_threshold) )
-            with self.db.files.find( { 'state': 'new', 'path': self.pathPattern, 'group': self.sGroup, 'store': self.storeName, 'ctime': { '$lt': ctime_threshold } }, timeout=False).batch_size(512) as cursor:
+            ctime_threshold = (now - self.minAge * 60)
+            self.logger.debug(f"Looking for files matching {{ "
+                              f"path: {self.pathPattern.pattern}, "
+                              f"group: {self.sGroup.pattern}, "
+                              f"store: {self.storeName.pattern}, "
+                              f"ctime: {{ $lt: {ctime_threshold} }} }}")
+            with self.db.files.find(
+                    {'state': 'new', 'path': self.pathPattern, 'group': self.sGroup, 'store': self.storeName,
+                     'ctime': {'$lt': ctime_threshold}}, timeout=False).batch_size(512) as cursor:
                 cursor.sort('ctime', ASCENDING)
                 sumsize = 0
                 old_file_mode = False
-                ctime_oldfile_threshold = (now - self.maxAge*60)
+                ctime_oldfile_threshold = (now - self.maxAge * 60)
                 for f in cursor:
                     if f['ctime'] < ctime_oldfile_threshold:
                         old_file_mode = True
@@ -254,33 +170,39 @@ class GroupPackager:
 
                 filecount = cursor.count()
 
-                self.logger.info("found %d files with a combined size of %d bytes" % (filecount, sumsize))
+                self.logger.info(f"found {filecount} files with a combined size of {sumsize} bytes")
                 if old_file_mode:
-                    self.logger.debug("containing old files: ctime < %d" % ctime_oldfile_threshold)
+                    self.logger.debug(f"containing old files: ctime < {ctime_oldfile_threshold}")
                 else:
-                    self.logger.debug("containing no old files: ctime < %d" % ctime_oldfile_threshold)
+                    self.logger.debug(f"containing no old files: ctime < {ctime_oldfile_threshold}")
 
                 if old_file_mode:
                     if sumsize < self.archiveSize:
-                        self.logger.info("combined size of old files not big enough for a regular archive, packing in old-file-mode")
+                        self.logger.info(
+                            "combined size of old files not big enough for a regular archive, packing in old-file-mode")
 
                     else:
                         old_file_mode = False
-                        self.logger.info("combined size of old files big enough for regular archive, packing in normal mode")
+                        self.logger.info(
+                            "combined size of old files big enough for regular archive, packing in normal mode")
                 elif sumsize < self.archiveSize:
-                    self.logger.info("no old files found and %d bytes missing to create regular archive of size %d, leaving packager" % (self.archiveSize-sumsize, self.archiveSize))
+                    self.logger.info(
+                        f"no old files found and {self.archiveSize - sumsize} bytes missing to create regular archive "
+                        f"of size {self.archiveSize}, leaving packager")
                     return
 
                 cursor.rewind()
                 container = None
-                containerChimeraPath = None
+                container_chimera_path = None
                 try:
                     for f in cursor:
                         if filecount <= 0 or sumsize <= 0:
-                            self.logger.info("Actual number of files exceeds precalculated number, will collect new files in next run.")
+                            self.logger.info("Actual number of files exceeds precalculated number, will collect "
+                                             "new files in next run.")
                             break
 
-                        self.logger.debug("Next file %s [%s], remaining %d [%d bytes]" % (f['path'], f['pnfsid'], filecount, sumsize) )
+                        self.logger.debug(
+                            f"Next file {f['path']} [{f['pnfsid']}], remaining {filecount} [{sumsize} bytes]")
                         if not running:
                             if container:
                                 raise UserInterruptException(container.localfilepath)
@@ -290,42 +212,51 @@ class GroupPackager:
                         if container is None:
                             if sumsize >= self.archiveSize or old_file_mode:
                                 container = Container(self.archivePath, dcap)
-                                self.logger.info("Creating new container %s . %d files [%d bytes] remaining." % (container.pnfsfilepath, filecount, sumsize))
+                                self.logger.info(f"Creating new container {container.pnfsfilepath} . {filecount} "
+                                                 f"files [{sumsize} bytes] remaining.")
                             else:
-                                self.logger.info("remaining combined size %d < %d, leaving packager" % (sumsize, self.archiveSize))
+                                self.logger.info(
+                                    f"remaining combined size {sumsize} < {self.archiveSize}, leaving packager")
                                 return
 
                         if old_file_mode:
-                            self.logger.debug("%d bytes remaining for this archive" % sumsize)
-                            self.writeStatus(container.pnfsfilepath, sumsize, "%s [%s]" % ( f['path'], f['pnfsid'] ))
+                            self.logger.debug(f"{sumsize} bytes remaining for this archive")
+                            self.write_status(container.pnfsfilepath, sumsize, f"{f['path']} [{f['pnfsid']}]")
                         else:
-                            self.logger.debug("%d bytes remaining for this archive" % (self.archiveSize-container.size))
-                            self.writeStatus(container.pnfsfilepath, self.archiveSize-container.size, "%s [%s]" % ( f['path'], f['pnfsid'] ))
+                            self.logger.debug(
+                                f"{self.archiveSize - container.size} bytes remaining for this archive")
+                            self.write_status(container.pnfsfilepath, self.archiveSize - container.size,
+                                              f"{f['path']} [{f['pnfsid']}]")
 
                         try:
-                            localfile = f['path'].replace(data_root, mount_point, 1)
-                            self.logger.debug("before container.add(%s[%s], %s)" % (f['path'], f['pnfsid'], f['size']))
+                            localfile = f['path'].replace(dataRoot, mountPoint, 1)
+                            self.logger.debug(f"before container.add({f['path']}[{f['pnfsid']}], {f['size']})")
                             container.add(f['pnfsid'], f['path'], localfile, f['size'])
                             self.logger.debug("before collection.save")
-                            f['state'] = "added: %s" % container.pnfsfilepath
+                            f['state'] = f"added: {container.pnfsfilepath}"
                             f['lock'] = scriptId
                             cursor.collection.save(f)
-                            self.logger.debug("Added file %s [%s]" % (f['path'], f['pnfsid']))
-                        except IOError as e:
-                            self.logger.exception("IOError while adding file %s to archive %s [%s], %s" % (f['path'], container.pnfsfilepath, f['pnfsid'], e.message))
-                            self.logger.debug("Removing entry for file %s" % f['pnfsid'])
-                            self.db.files.remove( { 'pnfsid': f['pnfsid'] } )
-                        except OSError as e:
-                            self.logger.exception("OSError while adding file %s to archive %s [%s], %s" % (f['path'], f['pnfsid'], container.pnfsfilepath, e.message))
-                            self.logger.debug("Removing entry for file %s" % f['pnfsid'])
-                            self.db.files.remove( { 'pnfsid': f['pnfsid'] } )
+                            self.logger.debug(f"Added file {f['path']} [{f['pnfsid']}]")
+                        except (IOError, OSError) as e:
+                            if type(e) == type(IOError):
+                                self.logger.exception(f"IOError while adding file {f['path']} to archive "
+                                                      f"{container.pnfsfilepath} [{f['pnfsid']}], {e}")
+                            else:
+                                self.logger.exception(f"OSError while adding file {f['path']} to archive "
+                                                      f"{f['pnfsid']} [{container.pnfsfilepath}], {e}")
+                            self.logger.debug(f"Removing entry for file {f['pnfsid']}")
+                            self.db.files.remove({'pnfsid': f['pnfsid']})
                         except errors.OperationFailure as e:
-                            self.logger.error("Removing container %s due to OperationalFailure. See below for details." % container.localfilepath)
+                            self.logger.error(
+                                f"Removing container {container.localfilepath} due to OperationalFailure. "
+                                f"See below for details.")
                             container.close()
                             os.remove(container.localfilepath)
                             raise e
                         except errors.ConnectionFailure as e:
-                            self.logger.error("Removing container %s due to ConnectionFailure. See below for details." % container.localfilepath)
+                            self.logger.error(
+                                f"Removing container {container.localfilepath} due to ConnectionFailure. "
+                                f"See below for details.")
                             container.close()
                             os.remove(container.localfilepath)
                             raise e
@@ -334,63 +265,83 @@ class GroupPackager:
                         filecount -= 1
 
                         if container.size >= self.archiveSize:
-                            self.logger.debug("Closing full container %s" % container.pnfsfilepath)
-                            containerChimeraPath = container.pnfsfilepath
+                            self.logger.debug(f"Closing full container {container.pnfsfilepath}")
+                            container_chimera_path = container.pnfsfilepath
                             container.close()
 
-                            if self.verifyContainer(container):
-                                self.logger.info("Container %s successfully stored" % container.pnfsfilepath)
-                                self.db.files.update( { 'state': 'added: %s' % containerChimeraPath }, { '$set': { 'state': 'archived: %s' % containerChimeraPath }, '$unset': { 'lock': "" } }, multi=True )
-                                self.createArchiveEntry(container)
+                            if self.verify_container(container):
+                                self.logger.info(f"Container {container.pnfsfilepath} successfully stored")
+                                self.db.files.update({'state': f'added: {container_chimera_path}'},
+                                                     {'$set': {'state': f'archived: {container_chimera_path}'},
+                                                      '$unset': {'lock': ""}}, multi=True)
+                                self.create_archive_entry(container)
                             else:
-                                self.logger.warn("Removing container %s due to verification error" % container.localfilepath)
-                                self.db.files.update( { 'state': 'added: %s' % containerChimeraPath }, { '$set': { 'state': 'new' }, '$unset': { 'lock': "" } }, multi=True )
+                                self.logger.warning(
+                                    f"Removing container {container.localfilepath} due to verification error")
+                                self.db.files.update({'state': f'added: {container_chimera_path}'},
+                                                     {'$set': {'state': 'new'}, '$unset': {'lock': ""}}, multi=True)
                                 os.remove(container.localfilepath)
 
                             container = None
 
                     if container:
                         if not old_file_mode:
-                            self.logger.warn("Removing unful container %s . Maybe a file was deleted during packaging." % container.localfilepath)
+                            self.logger.warning(
+                                f"Removing unful container {container.localfilepath} . Maybe a file was deleted "
+                                f"during packaging.")
                             container.close()
                             os.remove(container.localfilepath)
                             return
 
-                        self.logger.debug("Closing container %s containing remaining old files", container.pnfsfilepath)
-                        containerChimeraPath = container.pnfsfilepath
+                        self.logger.debug(f"Closing container {container.pnfsfilepath} containing remaining old files")
+                        container_chimera_path = container.pnfsfilepath
                         container.close()
 
-                        if self.verifyContainer(container):
-                            self.logger.info("Container %s with old files successfully stored" % container.pnfsfilepath)
-                            self.db.files.update( { 'state': 'added: %s' % containerChimeraPath }, { '$set': { 'state': 'archived: %s' % containerChimeraPath }, '$unset': { 'lock': "" } }, multi=True )
-                            self.createArchiveEntry(container)
+                        if self.verify_container(container):
+                            self.logger.info(f"Container {container.pnfsfilepath} with old files successfully stored")
+                            self.db.files.update({'state': f'added: {container_chimera_path}'},
+                                                 {'$set': {'state': f'archived: {container_chimera_path}'},
+                                                  '$unset': {'lock': ""}}, multi=True)
+                            self.create_archive_entry(container)
                         else:
-                            self.logger.warn("Removing container %s with old files due to verification error" % container.localfilepath)
-                            self.db.files.update( { 'state': 'added: %s' % containerChimeraPath }, { '$set': { 'state': 'new' }, '$unset': { 'lock': "" } }, multi=True )
+                            self.logger.warning(
+                                f"Removing container {container.localfilepath} with old files due to "
+                                f"verification error")
+                            self.db.files.update({'state': f'added: {container_chimera_path}'},
+                                                 {'$set': {'state': 'new'}, '$unset': {'lock': ""}}, multi=True)
                             os.remove(container.localfilepath)
 
                 except IOError as e:
-                    self.logger.error("%s closing file %s. Trying to clean up files in state: 'added'. This might need additional manual fixing!" % (e.strerror, containerChimeraPath))
-                    self.db.files.update( { 'state': 'added: %s' % containerChimeraPath }, { '$set': { 'state': 'new' }, '$unset': { 'lock': "" } }, multi=True )
+                    self.logger.error(
+                        f"{e.strerror} closing file {container_chimera_path}. Trying to clean up files in state: "
+                        f"'added'. This might need additional manual fixing!")
+                    self.db.files.update({'state': f'added: {container_chimera_path}'},
+                                         {'$set': {'state': 'new'}, '$unset': {'lock': ""}}, multi=True)
                 except errors.OperationFailure as e:
-                    self.logger.error("Operation Exception in database communication while creating container %s . Please check!" % containerChimeraPath )
-                    self.logger.error('%s' % e.message)
+                    self.logger.error(
+                        f"Operation Exception in database communication while creating container "
+                        f"{container_chimera_path} . Please check!")
+                    self.logger.error(f'{e}')
                     os.remove(container.localfilepath)
                 except errors.ConnectionFailure as e:
-                    self.logger.error("Connection Exception in database communication. Removing incomplete container %s ." % containerChimeraPath)
-                    self.logger.error('%s' % e.message)
+                    self.logger.error(
+                        f"Connection Exception in database communication. Removing incomplete "
+                        f"container {container_chimera_path}.")
+                    self.logger.error(f'{e}')
                     os.remove(container.localfilepath)
 
         finally:
             dcap.close()
 
-def dotfile(filepath, tag):
-    with open(os.path.join(os.path.dirname(filepath), ".(%s)(%s)" % (tag, os.path.basename(filepath))), mode='r') as dotfile:
-       result = dotfile.readline().strip()
+
+def read_dotfile(filepath, tag):
+    with open(os.path.join(os.path.dirname(filepath), f".({tag})({os.path.basename(filepath)})"),
+              mode='r') as dotfile:
+        result = dotfile.readline().strip()
     return result
 
 
-def main(configfile = '/etc/dcache/container.conf'):
+def main(configfile='/etc/dcache/container.conf'):
     global running
 
     # initialize logging
@@ -398,30 +349,34 @@ def main(configfile = '/etc/dcache/container.conf'):
     log_handler = None
 
     while running:
+        global scriptId
+        global archiveUser
+        global archiveMode
+        global mountPoint
+        global dataRoot
+        global mongoUri
+        global mongoDb
+        global dcapUrl
+
         try:
-            configuration = Parser.RawConfigParser(defaults = { 'scriptId': 'pack', 'archiveUser': 'root', 'archiveMode': '0644', 'mongoUri': 'mongodb://localhost/', 'mongoDb': 'smallfiles', 'loopDelay': 5, 'logLevel': 'ERROR' })
+            configuration = Parser.RawConfigParser(
+                defaults={'scriptId': 'pack', 'archiveUser': 'root', 'archiveMode': '0644',
+                          'mongoUri': 'mongodb://localhost/', 'mongoDb': 'smallfiles', 'loopDelay': 5,
+                          'logLevel': 'ERROR'})
             configuration.read(configfile)
 
-            global scriptId
-            global archiveUser
-            global archiveMode
-            global mount_point
-            global data_root
-            global mongo_uri
-            global mongo_db
-            global dcapUrl
             scriptId = configuration.get('DEFAULT', 'scriptId')
-            
-            logLevelStr = configuration.get('DEFAULT', 'logLevel')
-            logLevel = getattr(logging, logLevelStr.upper(), None)
-            logger.setLevel(logLevel)
+
+            log_level_str = configuration.get('DEFAULT', 'logLevel')
+            log_level = getattr(logging, log_level_str.upper(), None)
+            logger.setLevel(log_level)
 
             if log_handler is not None:
                 log_handler.close()
                 logger.removeHandler(log_handler)
 
-            log_handler = logging.handlers.WatchedFileHandler('/var/log/dcache/pack-files-%s.log' % scriptId)
-            formatter = logging.Formatter('%(asctime)s %(name)-80s %(levelname)-8s %(message)s')
+            log_handler = logging.handlers.WatchedFileHandler(f'/var/log/dcache/pack-files-{scriptId}.log')
+            formatter = logging.Formatter('%(asctime)s %(name)-10s %(levelname)-8s %(message)s')
             log_handler.setFormatter(formatter)
             logger.addHandler(log_handler)
 
@@ -430,105 +385,105 @@ def main(configfile = '/etc/dcache/container.conf'):
             mountPoint = configuration.get('DEFAULT', 'mountPoint')
             dataRoot = configuration.get('DEFAULT', 'dataRoot')
             mongoUri = configuration.get('DEFAULT', 'mongoUri')
-            mongoDb  = configuration.get('DEFAULT', 'mongodb')
+            mongoDb = configuration.get('DEFAULT', 'mongodb')
             dcapUrl = configuration.get('DEFAULT', 'dcapUrl')
 
-            loopDelay = configuration.getint('DEFAULT', 'loopDelay')
+            loop_delay = configuration.getint('DEFAULT', 'loopDelay')
 
-
-            logging.info('Successfully read configuration from file %s.' % configfile)
-            logging.debug('scriptId = %s' % scriptId)
-            logging.debug('archiveUser = %s' % archiveUser)
-            logging.debug('archiveMode = %s' % archiveMode)
-            logging.debug('mountPoint = %s' % mountPoint)
-            logging.debug('dataRoot = %s' % dataRoot)
-            logging.debug('mongoUri = %s' % mongoUri)
-            logging.debug('mongoDb = %s' % mongoDb)
-            logging.debug('dcapUrl = %s' % dcapUrl)
-            logging.debug('logLevel = %s' % logLevel)
-            logging.debug('loopDelay = %s' % loopDelay)
+            logging.info(f'Successfully read configuration from file {configfile}.')
+            logging.debug(f'scriptId = {scriptId}')
+            logging.debug(f'archiveUser = {archiveUser}')
+            logging.debug(f'archiveMode = {archiveMode}')
+            logging.debug(f'mountPoint = {mountPoint}')
+            logging.debug(f'dataRoot = {dataRoot}')
+            logging.debug(f'mongoUri = {mongoUri}')
+            logging.debug(f'mongoDb = {mongoDb}')
+            logging.debug(f'dcapUrl = {dcapUrl}')
+            logging.debug(f'logLevel = {log_level}')
+            logging.debug(f'loopDelay = {loop_delay}')
 
             try:
                 client = MongoClient(mongoUri)
                 db = client[mongoDb]
                 logging.info("Established db connection")
-                
+
                 logging.info("Sanitizing database")
-                db.files.update( { 'lock': scriptId }, { '$set': { 'state': 'new' }, '$unset': { 'lock': "" } }, multi=True )
+                db.files.update({'lock': scriptId}, {'$set': {'state': 'new'}, '$unset': {'lock': ""}}, multi=True)
 
                 logging.info("Creating group packagers")
                 groups = configuration.sections()
-                groupPackagers = []
+                group_packagers = []
                 for group in groups:
-                    logging.debug("Group: %s" % group)
-                    filePattern = configuration.get(group, 'fileExpression')
-                    logging.debug("filePattern: %s" % filePattern)
-                    sGroup = configuration.get(group, 'sGroup')
-                    logging.debug("sGroup: %s" % sGroup)
-                    storeName = configuration.get(group, 'storeName')
-                    logging.debug("storeName: %s" % storeName)
-                    archivePath = configuration.get(group, 'archivePath')
-                    logging.debug("archivePath: %s" % archivePath)
-                    archiveSize = configuration.get(group, 'archiveSize')
-                    logging.debug("archiveSize: %s" % archiveSize)
-                    minAge = configuration.get(group, 'minAge')
-                    logging.debug("minAge: %s" % minAge)
-                    maxAge = configuration.get(group, 'maxAge')
-                    logging.debug("maxAge: %s" % maxAge)
+                    logging.debug(f"Group: {group}")
+                    file_pattern = configuration.get(group, 'fileExpression')
+                    logging.debug(f"filePattern: {file_pattern}")
+                    s_group = configuration.get(group, 'sGroup')
+                    logging.debug(f"sGroup: {s_group}")
+                    store_name = configuration.get(group, 'storeName')
+                    logging.debug(f"storeName: {store_name}")
+                    archive_path = configuration.get(group, 'archivePath')
+                    logging.debug(f"archivePath: {archive_path}")
+                    archive_size = configuration.get(group, 'archiveSize')
+                    logging.debug(f"archiveSize: {archive_size}")
+                    min_age = configuration.get(group, 'minAge')
+                    logging.debug(f"minAge: {min_age}")
+                    max_age = configuration.get(group, 'maxAge')
+                    logging.debug(f"maxAge: {max_age}")
                     verify = configuration.get(group, 'verify')
-                    logging.debug("verify: %s" % verify)
+                    logging.debug(f"verify: {verify}")
                     pathre = re.compile(configuration.get(group, 'pathExpression'))
-                    logging.debug("pathExpression: %s" % pathre.pattern)
-                    paths = db.files.find( { 'parent': pathre } ).distinct('parent')
+                    logging.debug(f"pathExpression: {pathre.pattern}")
+                    paths = db.files.find({'parent': pathre}).distinct('parent')
                     pathset = set()
                     for path in paths:
-                        pathmatch = re.match("(?P<sfpath>%s)" % pathre.pattern, path).group('sfpath')
+                        pathmatch = re.match(f"(?P<sfpath>{pathre.pattern})", path).group('sfpath')
                         pathset.add(pathmatch)
 
-                    logging.debug("Creating a packager for each path in: %s" % pathset)
+                    logging.debug(f"Creating a packager for each path in: {pathset}")
                     for path in pathset:
                         packager = GroupPackager(
                             path,
-                            filePattern,
-                            sGroup,
-                            storeName,
-                            archivePath,
-                            archiveSize,
-                            minAge,
-                            maxAge,
+                            file_pattern,
+                            s_group,
+                            store_name,
+                            archive_path,
+                            archive_size,
+                            min_age,
+                            max_age,
                             verify)
-                        groupPackagers.append(packager)
-                        logging.info("Added packager %s for paths matching %s" % (group, (packager.path)))
+                        group_packagers.append(packager)
+                        logging.info(f"Added packager {group} for paths matching {packager.path}")
 
                 logging.info("Running packagers")
-                for packager in groupPackagers:
+                for packager in group_packagers:
                     packager.run()
 
                 client.close()
 
             except errors.ConnectionFailure as e:
-                logging.error("Connection to DB failed: %s" % e.message)
+                logging.error(f"Connection to DB failed:{e}")
 
-            logging.info("Sleeping for %d seconds" % loopDelay)
-            time.sleep(loopDelay)
+            logging.info(f"Sleeping for {loop_delay} seconds")
+            time.sleep(loop_delay)
 
         except UserInterruptException as e:
             if e.arcfile:
-                logging.info("Cleaning up unfinished container %s." % e.arcfile)
+                logging.info(f"Cleaning up unfinished container {e.arcfile}.")
                 os.remove(e.arcfile)
                 logging.info("Cleaning up modified file entries.")
-                containerChimeraPath = e.arcfile.replace(mountPoint, dataRoot, 1)
-                db.files.update( { 'state': 'added: %s' % containerChimeraPath }, { '$set': { 'state': 'new' } }, multi=True )
+                container_chimera_path = e.arcfile.replace(mountPoint, dataRoot, 1)
+                db.files.update({'state': f'added: {container_chimera_path}'}, {'$set': {'state': 'new'}}, multi=True)
 
             logging.info("Finished cleaning up. Exiting.")
             sys.exit(1)
         except Parser.NoOptionError as e:
-            print("Missing option: %s" % e.message)
-            logging.error("Missing option: %s" % e.message)
+            print(f"Missing option: {e}")
+            logging.error(f"Missing option: {e}")
         except Parser.Error as e:
-            print("Error reading configfile %s: %s" % (configfile, e.message))
-            logging.error("Error reading configfile %s: %s" % (configfile, e.message))
+            print(f"Error reading configfile {configfile}: {e}")
+            logging.error(f"Error reading configfile {configfile}: {e}")
             sys.exit(2)
+
 
 if __name__ == '__main__':
     signal.signal(signal.SIGINT, sigint_handler)
@@ -543,4 +498,3 @@ if __name__ == '__main__':
     else:
         print("Usage: pack-files.py <configfile>")
         sys.exit(1)
-
