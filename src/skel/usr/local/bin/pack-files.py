@@ -13,6 +13,7 @@ import re
 import configparser as Parser
 import uuid
 import zlib
+import traceback
 from zipfile import ZipFile, ZipInfo, ZIP64_LIMIT, ZIP_DEFLATED
 from pymongo import MongoClient, errors, ASCENDING
 from pwd import getpwnam
@@ -35,6 +36,12 @@ def sigint_handler(signum, frame):
     logging.info(f"Caught signal {signum}.")
     print(f"Caught signal {signum}.")
     running = False
+
+
+def uncaught_handler(*exc_info):
+    err_text = "".join(traceback.format_exception(*exc_info))
+    logging.critical(err_text)
+    sys.stderr.write(err_text)
 
 
 class Container:
