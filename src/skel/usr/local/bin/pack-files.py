@@ -3,18 +3,16 @@
 
 import os
 import sys
-import stat
 import signal
 import time
 import logging
 import logging.handlers
 from datetime import datetime
 import re
-import configparser as Parser
+import configparser as parser
 import uuid
-import zlib
 import traceback
-from zipfile import ZipFile, ZipInfo, ZIP64_LIMIT, ZIP_DEFLATED
+from zipfile import ZipFile
 from pymongo import MongoClient, errors, ASCENDING
 from pwd import getpwnam
 from dcap import Dcap
@@ -366,7 +364,7 @@ def main(configfile='/etc/dcache/container.conf'):
         global dcapUrl
 
         try:
-            configuration = Parser.RawConfigParser(
+            configuration = parser.RawConfigParser(
                 defaults={'scriptId': 'pack', 'archiveUser': 'root', 'archiveMode': '0644',
                           'mongoUri': 'mongodb://localhost/', 'mongoDb': 'smallfiles', 'loopDelay': 5,
                           'logLevel': 'ERROR'})
@@ -483,10 +481,10 @@ def main(configfile='/etc/dcache/container.conf'):
 
             logging.info("Finished cleaning up. Exiting.")
             sys.exit(1)
-        except Parser.NoOptionError as e:
+        except parser.NoOptionError as e:
             print(f"Missing option: {e}")
             logging.error(f"Missing option: {e}")
-        except Parser.Error as e:
+        except parser.Error as e:
             print(f"Error reading configfile {configfile}: {e}")
             logging.error(f"Error reading configfile {configfile}: {e}")
             sys.exit(2)
