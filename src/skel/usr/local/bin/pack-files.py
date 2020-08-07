@@ -54,7 +54,7 @@ class Container:
         self.logger.debug("Initializing")
 
         self.dcaparc = dcap.open_file(self.pnfsfilepath, 'w')
-        self.arcfile = ZipFile(self.dcaparc)
+        self.arcfile = ZipFile(self.dcaparc, 'w')
         global archiveUser
         global archiveMode
         self.archiveUid = getpwnam(archiveUser).pw_uid
