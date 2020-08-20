@@ -30,7 +30,7 @@ report() {
    echo "`date +"%D-%T"` ($$) $pnfsid $1" | tee -a $LOG >&2
 }
 problem() {
-   echo "($$) $2 ($1)" | tee -a $LOG >&2
+   echo "`date +"%D-%T"` ($$) $2 ($1)" | tee -a $LOG >&2
    exit $1
 }
 errorReport() {
