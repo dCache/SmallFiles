@@ -9,6 +9,7 @@ import configparser as parser
 from pymongo import MongoClient, errors
 import logging
 import logging.handlers
+import traceback
 
 running = True
 
@@ -23,6 +24,12 @@ def sigint_handler(signum, frame):
     logging.info(f"Caught signal {signum}.")
     print(f"Caught signal {signum}.")
     running = False
+
+
+def uncaught_handler(*exc_info):
+    err_text = "".join(traceback.format_exception(*exc_info))
+    logging.critical(err_text)
+    sys.stderr.write(err_text)
 
 
 def get_dotfile(filepath, tag):
@@ -127,6 +134,7 @@ def main(configfile='/etc/dcache/container.conf'):
 
 if __name__ == '__main__':
     signal.signal(signal.SIGINT, sigint_handler)
+    sys.excepthook = uncaught_handler
     if not os.getuid() == 0:
         print("fillmetadata.py must run as root!")
         sys.exit(2)
