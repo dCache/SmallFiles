@@ -79,7 +79,7 @@ def main(configfile='/etc/dcache/container.conf'):
                 logging.info("Established db connection")
 
                 with db.archives.find() as archives:
-                    logger.info(f"found {archives.count()} archive(s)")
+                    logger.info(f"found {archives.count()} archive entries")
                     for archive in archives:
                         if not running:
                             logging.info("Exiting.")
