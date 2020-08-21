@@ -492,6 +492,7 @@ def main(configfile='/etc/dcache/container.conf'):
 
 if __name__ == '__main__':
     signal.signal(signal.SIGINT, sigint_handler)
+    sys.excepthook = uncaught_handler
     if not os.getuid() == 0:
         print("pack-files must run as root!")
         sys.exit(2)

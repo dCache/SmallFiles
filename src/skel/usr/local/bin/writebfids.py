@@ -108,6 +108,7 @@ def main(configfile='/etc/dcache/container.conf'):
                                     db.failures.insert({'archiveId': archive_pnfsid, 'pnfsid': f.filename})
 
                             logging.debug(f"stat({localpath}): {os.stat(localpath)}")
+                            zf.close()
 
                             db.archives.remove({'pnfsid': archive['pnfsid']})
                             logging.debug(f"Removed entry for archive {archive['path']}[{archive['pnfsid']}]")
@@ -118,12 +119,14 @@ def main(configfile='/etc/dcache/container.conf'):
 
                         except BadZipfile:
                             logging.warning(f"Archive {localpath} is not yet ready. Will try later.")
+                            zf.close()
 
                         except IOError as e:
                             if e.errno != errno.EINTR:
                                 logging.error(f"IOError: {e.strerror}")
                             else:
                                 logging.info("User interrupt.")
+                            zf.close()
 
                 client.close()
 
