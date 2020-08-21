@@ -47,7 +47,7 @@ def main(configfile='/etc/dcache/container.conf'):
         while running:
             configuration = parser.RawConfigParser(
                 defaults={'scriptId': 'pack', 'mongoUri': 'mongodb://localhost/', 'mongoDb': 'smallfiles',
-                          'loopDelay': 5, 'logLevel': 'ERROR'})
+                          'logLevel': 'ERROR'})
             configuration.read(configfile)
 
             script_id = configuration.get('DEFAULT', 'scriptId')
@@ -69,7 +69,6 @@ def main(configfile='/etc/dcache/container.conf'):
             dataRoot = configuration.get('DEFAULT', 'dataRoot')
             mongoUri = configuration.get('DEFAULT', 'mongoUri')
             mongoDb = configuration.get('DEFAULT', 'mongodb')
-            loop_delay = configuration.getint('DEFAULT', 'loopDelay')
 
             logger.info(f'Successfully read configuration from file {configfile}.')
 
