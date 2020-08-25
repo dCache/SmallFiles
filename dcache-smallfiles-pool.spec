@@ -3,7 +3,7 @@
 #
 Summary: Scripts that allow handling of small files with dCache
 Name: dcache-smallfiles-pool
-Version: 1.2.3
+Version: 1.2.4
 Release: 1
 License: GPL
 Group: Applications/Services
