@@ -50,6 +50,10 @@ def main(configfile='/etc/dcache/container.conf'):
     logger = logging.getLogger()
     log_handler = None
 
+    #initialize logging
+    logger = logging.getLogger()
+    log_handler = None
+
     try:
         while running:
             configuration = parser.RawConfigParser(
