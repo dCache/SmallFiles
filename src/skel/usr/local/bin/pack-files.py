@@ -53,8 +53,23 @@ class Container:
         self.logger = logging.getLogger(name=f"Container[{self.pnfsfilepath}]")
         self.logger.debug("Initializing")
 
-        self.dcaparc = dcap.open_file(self.pnfsfilepath, 'w')
-        self.arcfile = ZipFile(self.dcaparc, 'w')
+        self.arcfile = None
+        self.dcaparc = None
+
+        try:
+            self.dcaparc = dcap.open_file(self.pnfsfilepath, 'w')
+            self.arcfile = ZipFile(self.dcaparc, 'w')
+        except IOError as ioe:
+            self.logger.error(f"Caught IOError while opening Container: {ioe}")
+            self.logger.info("Trying to clean up")
+            if self.arcfile:
+                self.arcfile.close()
+            if self.dcaparc:
+                self.dcaparc.close()
+            if os.path.isfile(self.pnfsfilepath) and os.path.getsize(self.pnfsfilepath) == 0:
+                self.logger.info(f"Removing {self.pnfsfilepath}")
+                os.remove(self.pnfsfilepath)
+            raise ioe
         global archiveUser
         global archiveMode
         self.archiveUid = getpwnam(archiveUser).pw_uid
