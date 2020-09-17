@@ -56,6 +56,7 @@ class Container:
         self.arcfile = None
         self.dcaparc = None
 
+        # workaround for IOError
         try:
             self.dcaparc = dcap.open_file(self.pnfsfilepath, 'w')
             self.arcfile = ZipFile(self.dcaparc, 'w')
@@ -69,7 +70,8 @@ class Container:
             if os.path.isfile(self.pnfsfilepath) and os.path.getsize(self.pnfsfilepath) == 0:
                 self.logger.info(f"Removing {self.pnfsfilepath}")
                 os.remove(self.pnfsfilepath)
-            raise ioe
+            os.execv(sys.executable, ['python'] + sys.argv)
+            # raise ioe
         global archiveUser
         global archiveMode
         self.archiveUid = getpwnam(archiveUser).pw_uid
