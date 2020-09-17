@@ -70,6 +70,7 @@ class Container:
             if os.path.isfile(self.pnfsfilepath) and os.path.getsize(self.pnfsfilepath) == 0:
                 self.logger.info(f"Removing {self.pnfsfilepath}")
                 os.remove(self.pnfsfilepath)
+            logging.critical(f"Restarting script due to IOError")
             os.execv(sys.executable, ['python'] + sys.argv)
             # raise ioe
         global archiveUser
