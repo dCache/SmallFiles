@@ -128,7 +128,10 @@ def main(configfile='/etc/dcache/container.conf'):
 
                         except IOError as e:
                             if e.errno != errno.EINTR:
-                                logging.error(f"IOError: {e.strerror}")
+                                # workaround for IOError
+                                # logging.error(f"IOError: {e.strerror}")
+                                logging.critical(f"Restarting script due to IOError {e.strerror}")
+                                os.execv(sys.executable, ['python'] + sys.argv)
                             else:
                                 logging.info("User interrupt.")
                             zf.close()
