@@ -7,7 +7,7 @@ import time
 import errno
 import signal
 from zipfile import ZipFile, BadZipfile
-from pymongo import MongoClient, errors
+from pymongo import MongoClient, errors, CursorType
 import configparser as parser
 import logging
 import logging.handlers
@@ -86,7 +86,7 @@ def main(configfile='/etc/dcache/container.conf'):
                 logging.info("Established db connection")
 
                 with db.archives.find() as archives:
-                    logger.info(f"found {archives.count()} archive entries")
+                    logger.info(f"found {db.archives.count_documents({})} archive entries")
                     for archive in archives:
                         if not running:
                             logging.info("Exiting.")
@@ -98,7 +98,8 @@ def main(configfile='/etc/dcache/container.conf'):
                             for f in zf.filelist:
                                 logging.debug(f"Entering bfid into record for file {f.filename}")
                                 filerecord = db.files.find_one(
-                                    {'pnfsid': f.filename, 'state': f"archived: {archive['path']}"}, await_data=True)
+                                    {'pnfsid': f.filename, 'state': f"archived: {archive['path']}"},
+                                    cursor_type=CursorType.TAILABLE_AWAIT)
                                 if filerecord:
                                     url = f"dcache://dcache/?store={filerecord['store']}&group={filerecord['group']}" \
                                           f"&bfid={f.filename}:{archive_pnfsid}"
