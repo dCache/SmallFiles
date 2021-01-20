@@ -83,8 +83,8 @@ def main(configfile='/etc/dcache/container.conf'):
                 client = MongoClient(mongoUri)
                 db = client[mongoDb]
 
-                with db.files.find({'state': {'$exists': False}}, snapshot=True) as new_files_cursor:
-                    logger.info(f"found {new_files_cursor.count()} new files")
+                with db.files.find({'state': {'$exists': False}}, hint=[("$natural", 1)]) as new_files_cursor:
+                    logger.info(f"found {db.files.count_documents({'state': {'$exists': False}})} new files")
                     for record in new_files_cursor:
                         if not running:
                             sys.exit(1)
