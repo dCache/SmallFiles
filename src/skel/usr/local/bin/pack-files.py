@@ -181,7 +181,7 @@ class GroupPackager:
                               f"ctime: {{ $lt: {ctime_threshold} }} }}")
             with self.db.files.find(
                     {'state': 'new', 'path': self.pathPattern, 'group': self.sGroup, 'store': self.storeName,
-                     'ctime': {'$lt': ctime_threshold}}, timeout=False).batch_size(512) as cursor:
+                     'ctime': {'$lt': ctime_threshold}}, no_cursor_timeout=False).batch_size(512) as cursor:
                 cursor.sort('ctime', ASCENDING)
                 sumsize = 0
                 old_file_mode = False
@@ -294,15 +294,15 @@ class GroupPackager:
 
                             if self.verify_container(container):
                                 self.logger.info(f"Container {container.pnfsfilepath} successfully stored")
-                                self.db.files.update({'state': f'added: {container_chimera_path}'},
+                                self.db.files.update_many({'state': f'added: {container_chimera_path}'},
                                                      {'$set': {'state': f'archived: {container_chimera_path}'},
-                                                      '$unset': {'lock': ""}}, multi=True)
+                                                      '$unset': {'lock': ""}})
                                 self.create_archive_entry(container)
                             else:
                                 self.logger.warning(
                                     f"Removing container {container.localfilepath} due to verification error")
-                                self.db.files.update({'state': f'added: {container_chimera_path}'},
-                                                     {'$set': {'state': 'new'}, '$unset': {'lock': ""}}, multi=True)
+                                self.db.files.update_many({'state': f'added: {container_chimera_path}'},
+                                                     {'$set': {'state': 'new'}, '$unset': {'lock': ""}})
                                 os.remove(container.localfilepath)
 
                             container = None
@@ -322,24 +322,24 @@ class GroupPackager:
 
                         if self.verify_container(container):
                             self.logger.info(f"Container {container.pnfsfilepath} with old files successfully stored")
-                            self.db.files.update({'state': f'added: {container_chimera_path}'},
+                            self.db.files.update_many({'state': f'added: {container_chimera_path}'},
                                                  {'$set': {'state': f'archived: {container_chimera_path}'},
-                                                  '$unset': {'lock': ""}}, multi=True)
+                                                  '$unset': {'lock': ""}})
                             self.create_archive_entry(container)
                         else:
                             self.logger.warning(
                                 f"Removing container {container.localfilepath} with old files due to "
                                 f"verification error")
-                            self.db.files.update({'state': f'added: {container_chimera_path}'},
-                                                 {'$set': {'state': 'new'}, '$unset': {'lock': ""}}, multi=True)
+                            self.db.files.update_many({'state': f'added: {container_chimera_path}'},
+                                                 {'$set': {'state': 'new'}, '$unset': {'lock': ""}})
                             os.remove(container.localfilepath)
 
                 except IOError as e:
                     self.logger.error(
                         f"{e.strerror} closing file {container_chimera_path}. Trying to clean up files in state: "
                         f"'added'. This might need additional manual fixing!")
-                    self.db.files.update({'state': f'added: {container_chimera_path}'},
-                                         {'$set': {'state': 'new'}, '$unset': {'lock': ""}}, multi=True)
+                    self.db.files.update_many({'state': f'added: {container_chimera_path}'},
+                                         {'$set': {'state': 'new'}, '$unset': {'lock': ""}})
                 except errors.OperationFailure as e:
                     self.logger.error(
                         f"Operation Exception in database communication while creating container "
@@ -431,7 +431,7 @@ def main(configfile='/etc/dcache/container.conf'):
                 logging.info("Established db connection")
 
                 logging.info("Sanitizing database")
-                db.files.update({'lock': scriptId}, {'$set': {'state': 'new'}, '$unset': {'lock': ""}}, multi=True)
+                db.files.update_many({'lock': scriptId}, {'$set': {'state': 'new'}, '$unset': {'lock': ""}})
 
                 logging.info("Creating group packagers")
                 groups = configuration.sections()
@@ -495,7 +495,7 @@ def main(configfile='/etc/dcache/container.conf'):
                 os.remove(e.arcfile)
                 logging.info("Cleaning up modified file entries.")
                 container_chimera_path = e.arcfile.replace(mountPoint, dataRoot, 1)
-                db.files.update({'state': f'added: {container_chimera_path}'}, {'$set': {'state': 'new'}}, multi=True)
+                db.files.update_many({'state': f'added: {container_chimera_path}'}, {'$set': {'state': 'new'}})
 
             logging.info("Finished cleaning up. Exiting.")
             sys.exit(1)
