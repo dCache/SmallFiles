@@ -153,7 +153,7 @@ class GroupPackager:
         try:
             container_pnfsid = read_dotfile(container_local_path, 'id')
 
-            self.db.archives.insert({'pnfsid': container_pnfsid, 'path': container_chimera_path})
+            self.db.archives.insert_one({'pnfsid': container_pnfsid, 'path': container_chimera_path})
         except IOError:
             self.logger.critical(
                 f"Could not find archive file {container_chimera_path}, referred to by file entries in database! "
@@ -191,7 +191,9 @@ class GroupPackager:
                         old_file_mode = True
                     sumsize += f['size']
 
-                filecount = cursor.count()
+                filecount = self.db.files.count_documents({'state': 'new', 'path': self.pathPattern,
+                                                           'group': self.sGroup, 'store': self.storeName,
+                                                           'ctime': {'$lt': ctime_threshold}})
 
                 self.logger.info(f"found {filecount} files with a combined size of {sumsize} bytes")
                 if old_file_mode:
@@ -258,7 +260,9 @@ class GroupPackager:
                             self.logger.debug("before collection.save")
                             f['state'] = f"added: {container.pnfsfilepath}"
                             f['lock'] = scriptId
-                            cursor.collection.save(f)
+                            cursor.collection.replace_one({'state': 'new', 'path': self.pathPattern,
+                                                           'group': self.sGroup, 'store': self.storeName,
+                                                           'ctime': {'$lt': ctime_threshold}}, f)
                             self.logger.debug(f"Added file {f['path']} [{f['pnfsid']}]")
                         except (IOError, OSError) as e:
                             if type(e) == type(IOError):
@@ -268,7 +272,7 @@ class GroupPackager:
                                 self.logger.exception(f"OSError while adding file {f['path']} to archive "
                                                       f"{f['pnfsid']} [{container.pnfsfilepath}], {e}")
                             self.logger.debug(f"Removing entry for file {f['pnfsid']}")
-                            self.db.files.remove({'pnfsid': f['pnfsid']})
+                            self.db.files.delete_one({'pnfsid': f['pnfsid']})
                         except errors.OperationFailure as e:
                             self.logger.error(
                                 f"Removing container {container.localfilepath} due to OperationalFailure. "

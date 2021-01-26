@@ -98,25 +98,24 @@ def main(configfile='/etc/dcache/container.conf'):
                             for f in zf.filelist:
                                 logging.debug(f"Entering bfid into record for file {f.filename}")
                                 filerecord = db.files.find_one(
-                                    {'pnfsid': f.filename, 'state': f"archived: {archive['path']}"},
-                                    cursor_type=CursorType.TAILABLE_AWAIT)
+                                    {'pnfsid': f.filename, 'state': f"archived: {archive['path']}"})
                                 if filerecord:
                                     url = f"dcache://dcache/?store={filerecord['store']}&group={filerecord['group']}" \
                                           f"&bfid={f.filename}:{archive_pnfsid}"
                                     filerecord['archiveUrl'] = url
                                     filerecord['state'] = f"verified: {archive['path']}"
-                                    db.files.save(filerecord)
+                                    db.files.replace_one({'pnfsid': f.filename, 'state': f"archived: {archive['path']}"}, filerecord)
                                     logging.debug(f"Updated record with URL {url} in archive {archive['path']}")
                                 else:
                                     logging.warning(
                                         f"File {f.filename} in archive {archive['path']} has no entry in DB. "
                                         f"This could be caused by a previous forced interrupt. Creating failure entry.")
-                                    db.failures.insert({'archiveId': archive_pnfsid, 'pnfsid': f.filename})
+                                    db.failures.insert_one({'archiveId': archive_pnfsid, 'pnfsid': f.filename})
 
                             logging.debug(f"stat({localpath}): {os.stat(localpath)}")
                             zf.close()
 
-                            db.archives.remove({'pnfsid': archive['pnfsid']})
+                            db.archives.delete_one({'pnfsid': archive['pnfsid']})
                             logging.debug(f"Removed entry for archive {archive['path']}[{archive['pnfsid']}]")
 
                             pnfsname = os.path.join(os.path.dirname(localpath), archive['pnfsid'])

@@ -33,8 +33,7 @@ def uncaught_handler(*exc_info):
 
 
 def get_dotfile(filepath, tag):
-    with open(os.path.join(os.path.dirname(filepath), f".({tag})({os.path.basename(filepath)})"),
-              mode='r') as dotfile:
+    with open(os.path.join(os.path.dirname(filepath), f".({tag})({os.path.basename(filepath)})"), mode='r') as dotfile:
         result = dotfile.readline().strip()
     return result
 
@@ -99,7 +98,8 @@ def main(configfile='/etc/dcache/container.conf'):
                             record['ctime'] = stats.st_ctime
                             record['state'] = 'new'
 
-                            new_files_cursor.collection.save(record)
+                            new_files_cursor.collection.replace_one({'state': {'$exists': False}}, record,
+                                                                    hint=[("$natural", 1)])
                             logger.debug(f"Updated record: {str(record)}")
                         except KeyError as e:
                             logger.warning(f"KeyError: {str(record)}: {e}")
@@ -110,7 +110,7 @@ def main(configfile='/etc/dcache/container.conf'):
                                 logger.warning(f"OSError: {str(record)}: {e}")
                             logger.exception(e)
                             logger.info(f"Removing entry for file {record['pnfsid']}")
-                            db.files.remove({'pnfsid': record['pnfsid']})
+                            db.files.delete_one({'pnfsid': record['pnfsid']})
 
                 client.close()
 
