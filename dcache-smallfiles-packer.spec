@@ -3,7 +3,7 @@
 #
 Summary: Scripts that allow handling of small files with dCache
 Name: dcache-smallfiles-packer
-Version: 1.2.5
+Version: 1.2.6
 Release: 1
 License: GPL
 Group: Applications/Services
