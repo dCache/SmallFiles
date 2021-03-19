@@ -98,7 +98,8 @@ def main(configfile='/etc/dcache/container.conf'):
                             record['ctime'] = stats.st_ctime
                             record['state'] = 'new'
 
-                            new_files_cursor.collection.replace_one({'state': {'$exists': False}}, record,
+                            new_files_cursor.collection.replace_one({'pnfsid': record['pnfsid'],
+                                                                     'state': {'$exists': False}}, record,
                                                                     hint=[("$natural", 1)])
                             logger.debug(f"Updated record: {str(record)}")
                         except KeyError as e:

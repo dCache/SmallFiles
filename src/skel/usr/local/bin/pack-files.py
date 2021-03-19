@@ -260,9 +260,10 @@ class GroupPackager:
                             self.logger.debug("before collection.save")
                             f['state'] = f"added: {container.pnfsfilepath}"
                             f['lock'] = scriptId
-                            cursor.collection.replace_one({'state': 'new', 'path': self.pathPattern,
-                                                           'group': self.sGroup, 'store': self.storeName,
-                                                           'ctime': {'$lt': ctime_threshold}}, f)
+                            cursor.collection.replace_one({'pnfsid': f['pnfsid'], 'state': 'new',
+                                                           'path': self.pathPattern, 'group': self.sGroup,
+                                                           'store': self.storeName, 'ctime': {'$lt': ctime_threshold}},
+                                                          f)
                             self.logger.debug(f"Added file {f['path']} [{f['pnfsid']}]")
                         except (IOError, OSError) as e:
                             if type(e) == type(IOError):
